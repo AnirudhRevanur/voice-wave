@@ -21,20 +21,16 @@ import kotlin.math.sqrt
  * Runs in the background and listens to the accelerometer.
  * When it detects a shake, it fires OverlayActivity (the listening UI).
  *
- * HOW SHAKE DETECTION WORKS (simple version):
- * The accelerometer gives us X/Y/Z forces on the phone every few milliseconds.
- * We calculate the total force (magnitude). If it spikes above our threshold
- * AND enough time has passed since the last trigger, it's a shake.
+ * No microphone is used here — the accelerometer is extremely low power
+ * and raises no privacy concerns.
  */
 class ShakeDetectorService : Service(), SensorEventListener {
 
     private lateinit var sensorManager: SensorManager
     private var accelerometer: Sensor? = null
 
-    // Tune these if shake is too sensitive or not sensitive enough
-    private val SHAKE_THRESHOLD = 2.7f   // G-force above which we call it a shake
-    private val SHAKE_COOLDOWN_MS = 1500L // Don't re-trigger for 1.5 seconds
-
+    private val SHAKE_THRESHOLD = 2.7f
+    private val SHAKE_COOLDOWN_MS = 1500L
     private var lastShakeTime = 0L
 
     override fun onCreate() {
@@ -45,13 +41,9 @@ class ShakeDetectorService : Service(), SensorEventListener {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         startForeground(NOTIFICATION_ID, buildNotification())
-
-        // Start listening to the accelerometer
         accelerometer?.let {
             sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI)
         }
-
-        // If the service is killed by the system, restart it automatically
         return START_STICKY
     }
 
@@ -62,17 +54,12 @@ class ShakeDetectorService : Service(), SensorEventListener {
 
     override fun onBind(intent: Intent): IBinder? = null
 
-    // Called every time the accelerometer has new data
     override fun onSensorChanged(event: SensorEvent) {
         if (event.sensor.type != Sensor.TYPE_ACCELEROMETER) return
-
         val x = event.values[0]
         val y = event.values[1]
         val z = event.values[2]
-
-        // Calculate total G-force (magnitude of the 3D vector), minus gravity (9.8)
         val gForce = sqrt(x * x + y * y + z * z) / SensorManager.GRAVITY_EARTH
-
         if (gForce > SHAKE_THRESHOLD) {
             val now = System.currentTimeMillis()
             if (now - lastShakeTime > SHAKE_COOLDOWN_MS) {
@@ -82,15 +69,10 @@ class ShakeDetectorService : Service(), SensorEventListener {
         }
     }
 
-    override fun onAccuracyChanged(sensor: Sensor, accuracy: Int) {
-        // We don't care about this for shake detection
-    }
+    override fun onAccuracyChanged(sensor: Sensor, accuracy: Int) {}
 
     private fun onShakeDetected() {
-        // Buzz the phone so the user knows it triggered
         vibrate()
-
-        // Launch the listening overlay
         val intent = Intent(this, OverlayActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
         }
@@ -108,21 +90,13 @@ class ShakeDetectorService : Service(), SensorEventListener {
         vibrator.vibrate(VibrationEffect.createOneShot(80, VibrationEffect.DEFAULT_AMPLITUDE))
     }
 
-    // Android requires a notification to show when a foreground service is running.
-    // This is how the user knows VoiceWave is listening for shakes in the background.
     private fun buildNotification(): Notification {
         val channelId = "voicewave_shake"
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-
         val channel = NotificationChannel(
-            channelId,
-            "VoiceWave",
-            NotificationManager.IMPORTANCE_MIN  // Silent, no sound, minimal UI
-        ).apply {
-            description = "Shake detection is active"
-        }
+            channelId, "VoiceWave", NotificationManager.IMPORTANCE_MIN
+        ).apply { description = "Shake detection is active" }
         manager.createNotificationChannel(channel)
-
         return Notification.Builder(this, channelId)
             .setContentTitle("VoiceWave")
             .setContentText("Shake to talk")

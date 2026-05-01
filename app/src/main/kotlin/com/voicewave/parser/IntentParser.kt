@@ -25,7 +25,7 @@ package com.voicewave.parser
 object IntentParser {
 
     fun parse(input: String): VoiceCommand {
-        val text = input.lowercase().trim().replace(Regex("[^a-z0-9% .']"), " ")
+        val text = input.lowercase().trim().replace(Regex("[^a-z0-9% .'']"), " ")
             .replace(Regex("\\s+"), " ").trim()
 
         // ── App launching ─────────────────────────────────────────────────────
@@ -51,7 +51,6 @@ object IntentParser {
             val query = text.removeFirstWord().trim()
             if (query.isNotEmpty()) return VoiceCommand.YouTube(query)
         }
-        // "search youtube for X" / "play on youtube X"
         if (text.contains("youtube")) {
             val query = text
                 .replace(Regex(".*youtube.*?for\\s+"), "")
@@ -116,13 +115,14 @@ object IntentParser {
         if (nextWords.any { FuzzyMatcher.levenshtein(text, it) <= 2 }) return VoiceCommand.NextTrack
         if (prevWords.any { FuzzyMatcher.levenshtein(text, it) <= 2 }) return VoiceCommand.PreviousTrack
 
+        // ── Did you mean? ─────────────────────────────────────────────────────
+        // Nothing matched — try to find the closest command keyword and suggest it
+        val suggestion = CommandSuggester.suggest(text)
+        if (suggestion != null) return suggestion
+
         return VoiceCommand.Unknown(text)
     }
 
-    /**
-     * Returns true if [text] starts with any of the [keywords],
-     * using fuzzy matching on the first word only.
-     */
     private fun startsWithFuzzy(text: String, vararg keywords: String): Boolean {
         val firstWord = text.split(" ").first()
         return keywords.any { keyword ->
@@ -130,7 +130,6 @@ object IntentParser {
         }
     }
 
-    /** Removes the first word from a string */
     private fun String.removeFirstWord(): String =
         this.substringAfter(" ").trim()
 }
@@ -152,5 +151,12 @@ sealed class VoiceCommand {
     object PauseMusic : VoiceCommand()
     object NextTrack : VoiceCommand()
     object PreviousTrack : VoiceCommand()
+    /**
+     * The parser didn't match, but found a close-enough command keyword.
+     * [displayText] is the human-readable suggestion shown in the overlay,
+     * e.g. "open <app name>?" or "search YouTube for <query>?"
+     * [command] is the fully resolved command that will execute if confirmed.
+     */
+    data class Suggestion(val displayText: String, val command: VoiceCommand) : VoiceCommand()
     data class Unknown(val rawInput: String) : VoiceCommand()
 }
