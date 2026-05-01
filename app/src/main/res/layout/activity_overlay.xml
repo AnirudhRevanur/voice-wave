@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Full-screen transparent overlay.
+  - GlowBorderView sits behind everything, draws the animated border
+  - Content sits at the bottom: waveform + recognized text + hint
+-->
+<FrameLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/overlay_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#CC000000">
+
+    <!-- The animated glowing border — fills the whole screen -->
+    <com.voicewave.ui.GlowBorderView
+        android:id="@+id/glow_border"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <!-- Bottom content: waveform + text, pinned to bottom -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|center_horizontal"
+        android:orientation="vertical"
+        android:gravity="center_horizontal"
+        android:paddingBottom="72dp"
+        android:paddingLeft="32dp"
+        android:paddingRight="32dp">
+
+        <!-- Animated waveform bars -->
+        <com.voicewave.ui.WaveformView
+            android:id="@+id/waveform"
+            android:layout_width="wrap_content"
+            android:layout_height="96dp"
+            android:layout_marginBottom="20dp" />
+
+        <!-- Live transcription text -->
+        <TextView
+            android:id="@+id/recognized_text"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text=""
+            android:textColor="#FFFFFF"
+            android:textSize="26sp"
+            android:fontFamily="sans-serif-light"
+            android:gravity="center"
+            android:layout_marginBottom="16dp" />
+
+        <!-- Status line: "Listening..." or "Got it!" -->
+        <TextView
+            android:id="@+id/status_text"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Listening..."
+            android:textColor="#55FFFFFF"
+            android:textSize="13sp"
+            android:letterSpacing="0.12"
+            android:textAllCaps="true" />
+
+    </LinearLayout>
+
+</FrameLayout>
