@@ -17,6 +17,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.lifecycleScope
 import com.rementia.openwakeword.lib.WakeWordEngine
 import com.rementia.openwakeword.lib.model.WakeWordModel
+import com.voicewave.service.GemmaService
 import com.voicewave.R
 import com.voicewave.handlers.*
 import com.voicewave.parser.IntentParser
@@ -37,6 +38,7 @@ class OverlayActivity : AppCompatActivity() {
     private lateinit var suggestionBar: View
     private lateinit var suggestionLabel: TextView
     private lateinit var yesButton: Button
+    private val gemmaService by lazy { GemmaService(this) }
     private lateinit var noButton: Button
 
     // Wake word engine — only lives while the overlay is open
@@ -46,6 +48,8 @@ class OverlayActivity : AppCompatActivity() {
 
     // How long after a command completes we keep listening for a follow-up
     private val WAKE_WINDOW_MS = 30_000L
+    private var retryCount = 0
+    private val MAX_RETRIES = 2
 
     companion object {
         private const val MIC_PERMISSION_REQUEST = 100
@@ -83,6 +87,10 @@ class OverlayActivity : AppCompatActivity() {
 
         findViewById<View>(R.id.overlay_root).setOnClickListener { finish() }
 
+        statusText.text = "Listening...."
+        recognizedText.text = ""
+        retryCount = 0
+
         if (hasMicPermission()) startListening() else requestMicPermission()
     }
 
@@ -91,6 +99,7 @@ class OverlayActivity : AppCompatActivity() {
     private fun startListening() {
         statusText.text = "Listening..."
         recognizedText.text = ""
+        voiceService?.stop()
         voiceService = VoiceCommandService(this)
 
         lifecycleScope.launch {
@@ -262,8 +271,27 @@ class OverlayActivity : AppCompatActivity() {
                 showSuggestion(command)
             }
             is VoiceCommand.Unknown -> {
-                statusText.text = "Didn\'t understand: \"${command.rawInput}\""
-                afterCommand()
+              Log.d("OverlayActivity", "Unknown command - retryCount=$retryCount, MAX_RETRIES=$MAX_RETRIES, input=${command.rawInput}")
+              if(retryCount < MAX_RETRIES) {
+                retryCount++
+                statusText.text = "Didn't catch that - try again (${retryCount}/${MAX_RETRIES})"
+                recognizedText.text = ""
+                lifecycleScope.launch {
+                  delay(800)
+                  startListening()
+                }
+              } else {
+                retryCount = 0
+                statusText.text = "Asking Wave"
+                recognizedText.text = ""
+                lifecycleScope.launch {
+                  val response = gemmaService.ask(command.rawInput)
+                  statusText.text = "Wave says:"
+                  recognizedText.text = response
+                  delay(1000)
+                  startWakeWordWindow()
+                }
+              }
             }
         }
     }
@@ -300,6 +328,8 @@ class OverlayActivity : AppCompatActivity() {
      * command by saying "Hey Wave", or tap anywhere to dismiss.
      */
     private fun afterCommand() {
+      retryCount = 0
+      recognizedText.text = ""
         lifecycleScope.launch {
             delay(600)            // brief pause so the action has time to dispatch
             startWakeWordWindow()
@@ -316,6 +346,11 @@ class OverlayActivity : AppCompatActivity() {
         super.onDestroy()
         voiceService?.stop()
         stopWakeWordWindow()
+        try{
+          gemmaService.close()
+        } catch (e: Exception) {
+          // Nothing to close
+        }
     }
 
     // ── Permissions ──────────────────────────────────────────────────────────
