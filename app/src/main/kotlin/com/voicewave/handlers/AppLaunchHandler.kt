@@ -3,43 +3,37 @@ package com.voicewave.handlers
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import com.voicewave.parser.FuzzyMatcher
 
-/**
- * Finds an installed app by name and launches it.
- *
- * HOW IT WORKS:
- * Android's PackageManager knows every installed app.
- * We ask it for the full list, then find the best fuzzy match
- * for what the user said. "spotty" → Spotify, "you tube" → YouTube, etc.
- */
 object AppLaunchHandler {
-
     fun handle(context: Context, appName: String): Boolean {
         val pm = context.packageManager
         val installedApps = pm.getInstalledApplications(PackageManager.GET_META_DATA)
 
-        // Build a map of: lowercase app label → package name
-        // e.g. "spotify" → "com.spotify.music"
         val appMap = installedApps.mapNotNull { appInfo ->
             val label = pm.getApplicationLabel(appInfo).toString().lowercase()
             label to appInfo.packageName
         }.toMap()
 
-        // Try exact match first
-        val exactMatch = appMap[appName.lowercase()]
-        if (exactMatch != null) {
-            return launchPackage(context, pm, exactMatch)
-        }
+        val query = appName.lowercase()
 
-        // Try "contains" match — user said "spotify", app is "Spotify Music"
-        val containsMatch = appMap.entries.firstOrNull { (label, _) ->
-            label.contains(appName.lowercase()) || appName.lowercase().contains(label)
-        }
-        if (containsMatch != null) {
-            return launchPackage(context, pm, containsMatch.value)
-        }
+        // 1. Exact match
+        appMap[query]?.let { return launchPackage(context, pm, it) }
 
-        // Nothing found
+        // 2. Contains match
+        appMap.entries.firstOrNull { (label, _) ->
+            label.contains(query) || query.contains(label)
+        }?.let { return launchPackage(context, pm, it.value) }
+
+        // 3. Fuzzy match — THIS is what was missing
+        // "what's up" → "whatsapp", "spotty" → "spotify", etc.
+        val bestMatch = FuzzyMatcher.bestMatch(
+            input = query,
+            candidates = appMap.keys.toList(),
+            threshold = 4  // tweak this if it's too loose or too strict
+        )
+        bestMatch?.let { return launchPackage(context, pm, appMap[it]!!) }
+
         return false
     }
 
